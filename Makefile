@@ -2,7 +2,7 @@
 TARGET	=	calc
 CARGS	=	-Wall -Wextra -Wpedantic
 DEBUG	=	-g
-LIBS	=	-lm
+LIBS	=	-lm -lreadline
 OBJS	=	calc.o scanner.o main.o
 
 all: $(TARGET)
