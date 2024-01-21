@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <math.h>
 
 typedef enum {
     ADD,
@@ -84,6 +85,18 @@ Elem* new_elem(Token tok, float val) {
     e->next = NULL;
 
     return e;
+}
+
+/*
+ * Free the queue and reset it to empty.
+ */
+void destroy_list(Elem* first) {
+
+    Elem *tmp, *next;
+    for(tmp = first; tmp != NULL; tmp = next) {
+        next = tmp->next;
+        free(tmp);
+    }
 }
 
 /*
@@ -305,37 +318,69 @@ void parse(const char* str) {
 
 /*
  * Solve the postfix expr in the queue and return the float value.
- *
+ */
 float solve() {
-
-    float val = 0.0;
 
     stack = NULL;
 
     for(Elem* e = queue; e != NULL; e = e->next) {
         switch(e->tok) {
-            case '+':
-            case '-':
-            case '*':
-            case '/':
-            case '%':
-            case '^':
-            case '_':
+            case ADD: {
+                    Elem* right = pop();
+                    Elem* left = pop();
+                    push(NUM, left->val + right->val);
+                }
+                break;
+            case SUB: {
+                    Elem* right = pop();
+                    Elem* left = pop();
+                    push(NUM, left->val - right->val);
+                }
+                break;
+            case MUL: {
+                    Elem* right = pop();
+                    Elem* left = pop();
+                    push(NUM, left->val * right->val);
+                }
+                break;
+            case DIV: {
+                    Elem* right = pop();
+                    Elem* left = pop();
+                    push(NUM, left->val / right->val);
+                }
+                break;
+            case MOD: {
+                    Elem* right = pop();
+                    Elem* left = pop();
+                    push(NUM, fmodf(left->val, right->val));
+                }
+                break;
+            case POW: {
+                    Elem* right = pop();
+                    Elem* left = pop();
+                    push(NUM, powf(left->val, right->val));
+                }
+                break;
+            case UMINUS: {
+                    Elem* val = pop();
+                    push(NUM, -val->val);
+                }
                 break;
             default:
                 // value
-                push(e->tok);
+                push(e->tok, e->val);
                 break;
         }
     }
 
-    return val;
+    return pop()->val;
 }
-*/
 
 int main() {
 
-    const char* expr = "1*-(2^2+3)*4+5";
+    //const char* expr = "1*-(2^2+3)*4+5"; // result = -23
+    //const char* expr = "2^5"; // result = 32
+    const char* expr = "9*5/2"; // result = 22.5
 
     printf("input: %s\n", expr);
 
@@ -350,6 +395,7 @@ int main() {
     }
     printf("\n");
 
+    printf("result: %f\n", solve());
 
     return 0;
 }
