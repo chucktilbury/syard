@@ -4,33 +4,22 @@
 #include <ctype.h>
 #include <math.h>
 
-typedef enum {
-    ADD,
-    SUB,
-    MUL,
-    DIV,
-    MOD,
-    UMINUS,
-    POW,
-    OP,
-    CP,
-    NUM,
-} Token;
-
-typedef struct _elem_ {
-    Token tok;
-    float val;
-    struct _elem_* next;
-} Elem;
-
-static Elem* stack = NULL;
-static Elem* queue = NULL;
-static Elem* last = NULL;
+#include "scanner.h"
 
 /*
- * Convert the operator or the number to a token.
+ * Stack used for both parsing and solving.
  */
-Token convert(int ch) {
+static Token* stack = NULL;
+/*
+ * Output queue of the parser.
+ */
+static Token* queue = NULL;
+static Token* last = NULL;
+
+/*
+ * Convert the operator or the number to a TokenType.
+ *
+TokenType convert(int ch) {
 
     switch(ch) {
         case '+': return ADD;
@@ -50,72 +39,62 @@ Token convert(int ch) {
             }
     }
 }
-
-const char* to_str(Token tok) {
-
-    return (tok == ADD)? "+":
-        (tok == SUB)? "-":
-        (tok == MUL)? "*":
-        (tok == DIV)? "/":
-        (tok == MOD)? "%":
-        (tok == UMINUS)? "_":
-        (tok == POW)? "^":
-        (tok == OP)? "(":
-        (tok == CP)? ")":
-        (tok == NUM)? "NUM": "UNKNOWN";
-}
+*/
 
 /*
  * Convert a single digit number to a float.
- */
+ *
 float num(int ch) {
 
     return (float)(ch - '0');
 }
+*/
 
 /*
  * Allocate memory for a stack or a queue item. No attempt to free because
  * this simply runs once and exists.
- */
-Elem* new_elem(Token tok, float val) {
+ *
+Token* new_token(TokenType tok, float val) {
 
-    Elem* e = malloc(sizeof(Elem));
+    Token* e = malloc(sizeof(Token));
     e->tok = tok;
     e->val = val;
     e->next = NULL;
 
     return e;
 }
+*/
 
 /*
  * Free the queue and reset it to empty.
- */
-void destroy_list(Elem* first) {
+ *
+static void destroy_list(Token* first) {
 
-    Elem *tmp, *next;
+    Token *tmp, *next;
     for(tmp = first; tmp != NULL; tmp = next) {
         next = tmp->next;
         free(tmp);
     }
 }
+ */
 
 /*
  * Push an element on the stack.
  */
-void push(Token tok, float val) {
+static void push(Token* tok) {
 
-    Elem* e = new_elem(tok, val);
+    //Token* e = new_token(tok, val);
 
-    e->next = stack;
-    stack = e;
+    tok->next = stack;
+    stack = tok;
 }
 
 /*
- * Pop an element from the stack.
+ * Pop an element from the stack and return the old top of stack.
  */
-Elem* pop() {
+static Token* pop() {
 
-    Elem* val;
+    Token* val;
 
     if(stack != NULL) {
         val = stack;
@@ -131,7 +110,7 @@ Elem* pop() {
 /*
  * Peek the top of the stack.
  */
-Elem* peek() {
+static Token* peek() {
 
     //printf("peek: %s\n", to_str(stack->tok));
     if(stack != NULL)
@@ -144,7 +123,7 @@ Elem* peek() {
  * If the stack is empty, then return 1, else return 0. This is needed because
  * the evaluate stack could contain a negative number.
  */
-int empty() {
+static int empty() {
 
     //printf("empty: %s\n", (stack == NULL)? "TRUE": "FALSE");
     return (stack == NULL)? 1: 0;
@@ -153,24 +132,24 @@ int empty() {
 /*
  * Append to the queue.
  */
-void append(Elem* elem) {
+static void append(Token* tok) {
 
-    Elem* e = new_elem(elem->tok, elem->val);
+    Token* t = copy_token(tok);
 
     if(last != NULL)
-        last->next = e;
+        last->next = t;
     else
-        queue = e;
+        queue = t;
 
-    last = e;
+    last = t;
 }
 
 /*
  * Return true if the tok is an operator.
  */
-int operator(Token tok) {
+static int operator(Token* tok) {
 
-    switch(tok) {
+    switch(tok->tok) {
         case ADD:
         case SUB:
         case MUL:
@@ -192,9 +171,9 @@ int operator(Token tok) {
 /*
  * Return the preceidence of an operator.
  */
-int prec(Token tok) {
+static int prec(Token* tok) {
 
-    switch(tok) {
+    switch(tok->tok) {
         case ADD:
         case SUB:
             return 1;
@@ -216,9 +195,9 @@ int prec(Token tok) {
 /*
  * Return true if the operator is left-associative.
  */
-int assoc(Token tok) {
+static int assoc(Token* tok) {
 
-    if(tok == UMINUS || tok == POW)
+    if(tok->tok == UMINUS || tok->tok == POW)
         return 0;
     else
         return 1;
@@ -230,73 +209,62 @@ int assoc(Token tok) {
  */
 void parse(const char* str) {
 
-    int ch;
-    int idx = 0;
-    int len = strlen(str);
-    int flag = 1;
+    //int ch;
+    //int idx = 0;
+    //int len = strlen(str);
+    //int flag = 1;
+    init_scanner(str);
+    Token* tok = get_token();
 
-    while(idx < len) {
-        ch = str[idx];
+    while(token_type() != EOL) {
+        tok = get_token();
 
-        if(isdigit(ch)) {
-            append(new_elem(convert(ch), num(ch)));
-            idx++;
-            flag = 0;
+        if(token_type() == NUM) {
+            append(tok);
+            consume_token();
         }
         // parse the operator
-        else if(operator(convert(ch))) {
-            ch = convert(ch);
-
-            // unary test
-            if((ch == SUB) && flag) {
-                ch = UMINUS;
-            }
-            else if((ch != OP) && flag) {
-                fprintf(stderr, "%s operator cannot be unary\n", to_str(ch));
-                exit(1);
-            }
-            flag = 1;
+        else if(operator(tok)) {
 
             // handle parens
-            if(ch == OP) {
-                push(OP, 0.0);
-                idx++;
+            if(token_type() == OP) {
+                push(get_token());
+                consume_token();
             }
-            else if(ch == CP) {
+            else if(token_type() == CP) {
                 //printf("seen: ')'\n");
                 while(1) {
-                    Elem* v = pop();
-                    if(empty()) {
+                    Token* v = pop();
+                    if(v->tok == OP)
+                        break;
+                    else if(empty()) {
                         fprintf(stderr, "missing '('\n");
                         exit(1);
                     }
-                    else if(v->tok == OP)
-                        break;
-                    else
+                    else {
                         append(v);
+                        consume_token();
+                    }
                 }
-
-                idx++;
-                flag = 0;
             }
             // is left assoc
-            else if(assoc(ch)) {
-                while(!empty() && (prec(peek()->tok) >= prec(ch))) {
+            else if(assoc(get_token())) {
+                while(!empty() && (prec(peek()) >= prec(get_token()))) {
                     append(pop());
                 }
 
-                push(ch, 0.0);
-                idx++;
+                push(get_token());
+                consume_token();
             }
             // else is right assoc
             else {
                 //printf("here '%s'\n", to_str(ch));
-                while(!empty() && (prec(peek()->tok) > prec(ch))) {
+                while(!empty() && (prec(peek()) > prec(get_token()))) {
                     append(pop());
                 }
 
-                push(ch, 0.0);
-                idx++;
+                push(get_token());
+                consume_token();
             }
         }
         else {
@@ -306,7 +274,7 @@ void parse(const char* str) {
     }
 
     while(!empty()) {
-        Elem* e = pop();
+        Token* e = pop();
         append(e);
 
         if(e->tok == OP) {
@@ -319,56 +287,56 @@ void parse(const char* str) {
 /*
  * Solve the postfix expr in the queue and return the float value.
  */
-float solve() {
+double solve() {
 
     stack = NULL;
 
-    for(Elem* e = queue; e != NULL; e = e->next) {
+    for(Token* e = queue; e != NULL; e = e->next) {
         switch(e->tok) {
             case ADD: {
-                    Elem* right = pop();
-                    Elem* left = pop();
-                    push(NUM, left->val + right->val);
+                    Token* right = pop();
+                    Token* left = pop();
+                    push(new_token(NUM, left->val + right->val));
                 }
                 break;
             case SUB: {
-                    Elem* right = pop();
-                    Elem* left = pop();
-                    push(NUM, left->val - right->val);
+                    Token* right = pop();
+                    Token* left = pop();
+                    push(new_token(NUM, left->val - right->val));
                 }
                 break;
             case MUL: {
-                    Elem* right = pop();
-                    Elem* left = pop();
-                    push(NUM, left->val * right->val);
+                    Token* right = pop();
+                    Token* left = pop();
+                    push(new_token(NUM, left->val * right->val));
                 }
                 break;
             case DIV: {
-                    Elem* right = pop();
-                    Elem* left = pop();
-                    push(NUM, left->val / right->val);
+                    Token* right = pop();
+                    Token* left = pop();
+                    push(new_token(NUM, left->val / right->val));
                 }
                 break;
             case MOD: {
-                    Elem* right = pop();
-                    Elem* left = pop();
-                    push(NUM, fmodf(left->val, right->val));
+                    Token* right = pop();
+                    Token* left = pop();
+                    push(new_token(NUM, fmodf(left->val, right->val)));
                 }
                 break;
             case POW: {
-                    Elem* right = pop();
-                    Elem* left = pop();
-                    push(NUM, powf(left->val, right->val));
+                    Token* right = pop();
+                    Token* left = pop();
+                    push(new_token(NUM, powf(left->val, right->val)));
                 }
                 break;
             case UMINUS: {
-                    Elem* val = pop();
-                    push(NUM, -val->val);
+                    Token* val = pop();
+                    push(new_token(NUM, -val->val));
                 }
                 break;
             default:
                 // value
-                push(e->tok, e->val);
+                push(new_token(e->tok, e->val));
                 break;
         }
     }
@@ -376,26 +344,3 @@ float solve() {
     return pop()->val;
 }
 
-int main() {
-
-    //const char* expr = "1*-(2^2+3)*4+5"; // result = -23
-    //const char* expr = "2^5"; // result = 32
-    const char* expr = "9*5/2"; // result = 22.5
-
-    printf("input: %s\n", expr);
-
-    parse(expr);
-
-    printf("output: ");
-    for(Elem* e = queue; e != NULL; e = e->next) {
-        if(e->tok == NUM)
-            printf("%d", (int)e->val);
-        else
-            printf("%s", to_str(e->tok));
-    }
-    printf("\n");
-
-    printf("result: %f\n", solve());
-
-    return 0;
-}
